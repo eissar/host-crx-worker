@@ -1,0 +1,8 @@
+name = "host-crx-worker"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+VERSION = "1.1.0"
+# EXTENSION_ID = ""
+# EXT_BINARY_R2 = ""

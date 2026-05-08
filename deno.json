@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@cloudflare/workers-types": "npm:@cloudflare/workers-types@latest"
+  }
+}
