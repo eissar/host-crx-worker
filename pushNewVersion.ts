@@ -1,5 +1,8 @@
 // deno-lint-ignore-file no-import-prefix
 
+// run with:
+// deno run --env --allow-all .\pushNewVersion.ts
+
 import { bundle } from "jsr:@deno/emit@0.46.0";
 import Cloudflare, { toFile } from "npm:cloudflare@6.1.0";
 
