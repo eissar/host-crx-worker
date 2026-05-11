@@ -45,19 +45,11 @@ if (existingVersionBinding?.text === env.VERSION) {
   Deno.exit(0);
 }
 
-const existingBindingNames = new Set(
-  existingBindings?.map((b) => b.name) ?? [],
-);
-
-const bindings = [plainText("VERSION", env.VERSION as string)];
-
-for (const name of ["EXTENSION_ID", "R2_URL"] as const) {
-  if (!existingBindingNames.has(name)) {
-    bindings.push(plainText(name, env[name] as string));
-  } else {
-    console.log(`${name} binding already exists, skipping.`);
-  }
-}
+  const bindings = [
+    plainText("VERSION", env.VERSION as string),
+    plainText("EXTENSION_ID", env.EXTENSION_ID as string),
+    plainText("R2_URL", env.R2_URL as string)
+  ];
 
 const { code } = await bundle(
   toFileUrl(join(Deno.cwd(), "src", "index.ts")),
