@@ -53,6 +53,7 @@ const cfg: Config = {
   CF_ACCOUNT_ID: Deno.env.get("CF_ACCOUNT_ID"),
   R2_URL: Deno.env.get("R2_URL"),
 };
+const crxURL = `${cfg.R2_URL}/${cfg.VERSION}.crx`;
 
 // Validate all required configuration values
 for (const [key, value] of Object.entries(cfg)) {
@@ -63,6 +64,13 @@ for (const [key, value] of Object.entries(cfg)) {
 
 console.log("using the following:", JSON.stringify(cfg, null, 2));
 if (!confirm("Continue with this operation?")) Deno.exit(1);
+
+const crxExistsResponse = await fetch(crxURL, { method: "HEAD" });
+if (!crxExistsResponse.ok) {
+  throw new Error(
+    `version ${cfg.VERSION} not yet uploaded this to the bucket at url: ${crxURL}`,
+  );
+}
 
 if (!Deno.env.has("KEY")) throw new Error("missing env var KEY");
 const client = new Cloudflare({ apiToken: Deno.env.get("KEY") });
