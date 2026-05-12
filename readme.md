@@ -23,6 +23,12 @@ deploy.ts to create a new version
 
 > wrangler r2 bucket create crx-bin
 
+
+todo:
+https://dash.cloudflare.com/CF_ACCOUNT_ID/workers/services/view/host-crx-worker/production/deployments
+wrangler promote <version>
+
+
 To access your new R2 Bucket in your Worker, add the following snippet to your configuration file:
 ```toml
 [[r2_buckets]]

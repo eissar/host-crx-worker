@@ -5,51 +5,92 @@
 
 import { bundle } from "jsr:@deno/emit@0.46.0";
 import Cloudflare, { toFile } from "npm:cloudflare@6.1.0";
+import type { ScriptAndVersionSettingGetResponse } from "npm:cloudflare@6.1.0/resources/workers/scripts/script-and-version-settings";
 
 import { join, toFileUrl } from "jsr:@std/path@0.223";
 
-const accountId = Deno.env.get("CF_ACCOUNT_ID");
-if (!accountId) throw new Error("CF_ACCOUNT_ID env var is not set!");
+// implicit error handling
+// we just panic if something goes wrong
+for (const type of ["unhandledrejection", "error"]) {
+  globalThis.addEventListener(type, (e) => {
+    console.error("Exiting... Unhandled:", e);
+    Deno.exit(1);
+  });
+}
 
-const apiToken = Deno.env.get("KEY");
-if (!apiToken) throw new Error("KEY env var is not set!");
+type Config = {
+  EXTENSION_ID: string;
+  VERSION: string;
+  CF_ACCOUNT_ID?: string;
+  R2_URL?: string;
+};
 
-const env = JSON.parse(await Deno.readTextFile("var.json")) as Record<
-  string,
-  unknown
->;
+const ghResult = await new Deno.Command("gh", {
+  args: [
+    "api",
+    "repos/eissar/gaafl/contents/gaafl.json",
+    "--jq",
+    ".content",
+  ],
+  stdout: "piped",
+  stderr: "inherit",
+}).output();
 
-console.log("using the following:", JSON.stringify(env, null, 2));
+if (!ghResult.success) {
+  console.error(`gh api failed, exit code: ${ghResult.code}`);
+  Deno.exit(1);
+}
+
+// may throw
+const rawConfig = JSON.parse(
+  atob(new TextDecoder().decode(ghResult.stdout).trim()),
+);
+
+// Map keys to match Config type
+const cfg: Config = {
+  EXTENSION_ID: rawConfig.extensionid,
+  VERSION: rawConfig.version,
+  CF_ACCOUNT_ID: Deno.env.get("CF_ACCOUNT_ID"),
+  R2_URL: Deno.env.get("R2_URL"),
+};
+
+// Validate all required configuration values
+for (const [key, value] of Object.entries(cfg)) {
+  if (!value) {
+    throw new Error(`Missing configuration value for ${key}`);
+  }
+}
+
+console.log("using the following:", JSON.stringify(cfg, null, 2));
 if (!confirm("Continue with this operation?")) Deno.exit(1);
 
-validateEnvVars(env);
-await validateVersionExists(env);
-
-const client = new Cloudflare({ apiToken });
+if (!Deno.env.has("KEY")) throw new Error("missing env var KEY");
+const client = new Cloudflare({ apiToken: Deno.env.get("KEY") });
 
 const existing = await client.workers.scripts.scriptAndVersionSettings.get(
   "host-crx-worker",
-  { account_id: accountId },
+  { account_id: cfg.CF_ACCOUNT_ID! },
 );
-const existingBindings = existing.bindings as
-  | Array<{ name: string; text?: string }>
-  | undefined;
+
+const existingBindings = (existing.bindings || []).filter((b) =>
+  b.type === "plain_text"
+) as ScriptAndVersionSettingGetResponse.WorkersBindingKindPlainText[];
 
 const existingVersionBinding = existingBindings?.find(
   (b) => b.name === "VERSION",
 );
-if (existingVersionBinding?.text === env.VERSION) {
-  console.log(
-    `Version ${env.VERSION} is already currently deployed, skipping.`,
-  );
-  Deno.exit(0);
+
+if (existingVersionBinding?.text === cfg.VERSION) {
+  if (
+    !confirm(`Version ${cfg.VERSION} is already currently deployed, continue?`)
+  ) Deno.exit(0);
 }
 
-  const bindings = [
-    plainText("VERSION", env.VERSION as string),
-    plainText("EXTENSION_ID", env.EXTENSION_ID as string),
-    plainText("R2_URL", env.R2_URL as string)
-  ];
+const bindings = [
+  plainText("VERSION", cfg.VERSION),
+  plainText("EXTENSION_ID", cfg.EXTENSION_ID),
+  plainText("R2_URL", cfg.R2_URL!),
+];
 
 const { code } = await bundle(
   toFileUrl(join(Deno.cwd(), "src", "index.ts")),
@@ -58,7 +99,7 @@ const { code } = await bundle(
 const response = await client.workers.scripts.versions.create(
   "host-crx-worker",
   {
-    account_id: accountId,
+    account_id: cfg.CF_ACCOUNT_ID!,
     files: [
       await toFile(
         new TextEncoder().encode(code),
@@ -76,28 +117,9 @@ const response = await client.workers.scripts.versions.create(
 console.log("✅ Worker deployed successfully");
 console.log(JSON.stringify(response, null, 2));
 
-function plainText(name: string, text: string) {
-  return { type: "plain_text" as const, name, text };
-}
-
-function validateEnvVars(env: Record<string, unknown>): void {
-  for (const key of ["VERSION", "EXTENSION_ID", "R2_URL"] as const) {
-    if (typeof env[key] !== "string") {
-      throw new Error(`Missing or invalid ${key}`);
-    }
-  }
-}
-
-async function validateVersionExists(
-  env: Record<string, unknown>,
-): Promise<void> {
-  const r = await fetch(
-    `${env.R2_URL as string}/${env.VERSION as string}.crx`,
-    {
-      method: "HEAD",
-    },
-  );
-  if (r.status !== 200) {
-    throw new Error("could not find crx with that version.");
-  }
+function plainText(
+  name: string,
+  text: string,
+): ScriptAndVersionSettingGetResponse.WorkersBindingKindPlainText {
+  return { type: "plain_text", name, text };
 }

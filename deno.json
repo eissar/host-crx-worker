@@ -1,5 +1,8 @@
 {
   "imports": {
     "@cloudflare/workers-types": "npm:@cloudflare/workers-types@latest"
+  },
+  "tasks": {
+    "push": "deno run --allow-all --env-file=.env pushNewVersion.ts"
   }
 }
